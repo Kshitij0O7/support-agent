@@ -1,0 +1,5 @@
+
+
+const closeTicket = async (ticketId) => {
+    
+};

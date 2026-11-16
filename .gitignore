@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Secrets: the real values live only in .env, never in the repo
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+
+# logs/ is NOT ignored on purpose: the brief asks for the logs in the repo.

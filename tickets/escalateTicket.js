@@ -1,0 +1,5 @@
+
+
+const escalateTicket = async (ticketId) => {
+    
+};
