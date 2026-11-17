@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "start": "node --env-file=.env index.js"
+    "start": "node --env-file=.env index.js",
+    "eval": "node --env-file=.env eval/runEval.js"
   },
   "keywords": [],
   "author": "",
