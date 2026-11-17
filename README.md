@@ -33,7 +33,7 @@ I assumed "unsure" is confidence below 0.7, thank-yous get closed, and vague tic
 | Baseline | 8/10 | 8.3 (8–9) | 0 | 2 |
 | + guard, + "answered" rule | 8/10 | 9.3 (9–10) | 0 | 2 |
 
-Language and category scored 10/10 in `eval/runEval.js`. Priority is noise: the guard changed nothing, and repeat runs scored 8 to 10. The agent hands off E01 (iOS crash) and E05 (feature idea), which the FAQ answers. A prompt rule defining "answered" failed; the model read it backwards. No model is right every time. These over-escalations annoy the support team, but beat a wrong answer reaching a customer, so I left them.
+Language and category scored 10/10 in `eval/runEval.js`. The priority gain is within run-to-run variance (the same code scored 8 to 10), so I don't credit either change. It hands off E01 (iOS crash) and E05 (feature idea), which the FAQ answers. A prompt rule defining "answered" failed; the model read it backwards. No model is right every time. Over-escalations annoy support but beat a wrong answer reaching a customer, so I left them.
 
 Final run: 12 replies, 1 close, 17 handoffs (8 always-human, 6 non-FAQ bugs, 3 judged). About $0.025 per 100 tickets: 3,613 input × $0.10 + 129,240 cached × $0.01 + 11,401 output × $0.50 per 1M tokens = $0.0074 for 30.
 
