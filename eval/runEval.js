@@ -23,15 +23,10 @@ import { getExamples } from '../tickets/readTickets.js';
 import { getContext } from '../context/getContext.js';
 import { makeDecision } from '../decision.js';
 import { redact } from '../logger.js';
+import { estimateCostUsd } from '../pricing.js';
 
 const FIELDS = ['language', 'category', 'priority', 'action'];
 const RESULTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'results');
-
-// USD per 1M tokens: input, output, cache read, cache write (5-minute cache).
-const PRICES = {
-  'claude-haiku-5-5': { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
-  'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
-};
 
 function parseArgs(argv) {
   const args = { runs: 3, label: 'run' };
@@ -42,18 +37,6 @@ function parseArgs(argv) {
   if (!Number.isInteger(args.runs) || args.runs < 1) throw new Error('--runs must be a positive integer');
   args.label = args.label.replace(/[^\w-]/g, '-');
   return args;
-}
-
-function costUsd(model, usage) {
-  const price = PRICES[model];
-  if (!price || !usage) return null;
-  return (
-    ((usage.input_tokens ?? 0) * price.input +
-      (usage.output_tokens ?? 0) * price.output +
-      (usage.cache_read_input_tokens ?? 0) * price.cacheRead +
-      (usage.cache_creation_input_tokens ?? 0) * price.cacheWrite) /
-    1e6
-  );
 }
 
 function scoreOne(label, decision) {
@@ -75,7 +58,7 @@ async function runOnce(examples, context) {
       label: example.label,
       decision,
       score: scoreOne(example.label, decision),
-      meta: { model: meta.model, fallback: meta.fallback, usage: meta.usage, costUsd: costUsd(meta.model, meta.usage) },
+      meta: { model: meta.model, fallback: meta.fallback, usage: meta.usage, costUsd: estimateCostUsd(meta.model, meta.usage) },
     });
   }
   const count = (fn) => items.filter(fn).length;
