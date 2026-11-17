@@ -15,6 +15,7 @@ import { escalateTicket } from './tickets/escalateTicket.js';
 import { closeTicket } from './tickets/closeTicket.js';
 import { getContext } from './context/getContext.js';
 import { makeDecision } from './decision.js';
+import { applyGuard } from './guard.js';
 import { logTicket, logFile } from './logger.js';
 import { estimateCostUsd } from './pricing.js';
 
@@ -56,18 +57,23 @@ async function handleTicket(ticket, context, { dryRun }) {
   const entry = { ticketId: ticket.id };
 
   // 1. Decide. If the LLM API is down, leave the ticket open rather than guessing.
-  let decision;
+  let proposed;
   let meta;
   try {
-    ({ decision, meta } = await makeDecision(ticket, context));
+    ({ decision: proposed, meta } = await makeDecision(ticket, context));
   } catch (err) {
     logTicket({ ...entry, outcome: 'failed', stage: 'decide', error: err, durationMs: Date.now() - started });
     return { outcome: 'failed', stage: 'decide', costUsd: 0 };
   }
 
+  // 2. Guard: deterministic safety checks; can only make the decision more careful.
+  const { decision, changes } = applyGuard(proposed, ticket, context);
+
   const costUsd = estimateCostUsd(meta.model, meta.usage) ?? 0;
   Object.assign(entry, {
     action: decision.action,
+    proposedAction: decision.action !== proposed.action ? proposed.action : undefined,
+    guard: changes.length ? changes : undefined,
     language: decision.language,
     category: decision.category,
     priority: decision.priority,
@@ -84,7 +90,7 @@ async function handleTicket(ticket, context, { dryRun }) {
     costUsd,
   });
 
-  // 2. Act. (The guard will sit between deciding and acting.)
+  // 3. Act.
   if (dryRun) {
     logTicket({ ...entry, outcome: 'dry_run', durationMs: Date.now() - started });
     return { outcome: 'dry_run', action: decision.action, costUsd };

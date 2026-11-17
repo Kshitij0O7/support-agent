@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { getExamples } from '../tickets/readTickets.js';
 import { getContext } from '../context/getContext.js';
 import { makeDecision } from '../decision.js';
+import { applyGuard } from '../guard.js';
 import { redact } from '../logger.js';
 import { estimateCostUsd } from '../pricing.js';
 
@@ -51,12 +52,16 @@ function scoreOne(label, decision) {
 async function runOnce(examples, context) {
   const items = [];
   for (const example of examples) {
-    const { decision, meta } = await makeDecision(example, context);
+    // Score what would actually reach the helpdesk: the model's decision after the guard.
+    const { decision: proposed, meta } = await makeDecision(example, context);
+    const { decision, changes } = applyGuard(proposed, example, context);
     items.push({
       id: example.id,
       subject: example.subject,
       label: example.label,
       decision,
+      proposedAction: proposed.action,
+      guardChanges: changes,
       score: scoreOne(example.label, decision),
       meta: { model: meta.model, fallback: meta.fallback, usage: meta.usage, costUsd: estimateCostUsd(meta.model, meta.usage) },
     });
@@ -69,13 +74,14 @@ async function runOnce(examples, context) {
       ...Object.fromEntries(FIELDS.map((f) => [f, count((i) => i.score.matches[f])])),
       unsafeReplies: count((i) => i.score.unsafeReply),
       overEscalations: count((i) => i.score.overEscalation),
+      guardChanged: count((i) => i.guardChanges.length > 0),
       costUsd: costs.includes(null) ? null : costs.reduce((a, b) => a + b, 0),
     },
   };
 }
 
 function summarize(runs, n) {
-  const keys = [...FIELDS, 'unsafeReplies', 'overEscalations'];
+  const keys = [...FIELDS, 'unsafeReplies', 'overEscalations', 'guardChanged'];
   const summary = {};
   for (const key of keys) {
     const values = runs.map((r) => r.totals[key]);
@@ -102,7 +108,8 @@ function perExample(runs) {
       items.some((i) => !i.score.matches[f]) ? [`${f}: want ${items[0].label[f]}, got ${items.map((i) => i.decision[f]).join('/')}`] : [],
     );
     const unstable = FIELDS.some((f) => new Set(items.map((i) => i.decision[f])).size > 1);
-    return { id, subject: items[0].subject, misses, unstable };
+    const guard = [...new Set(items.flatMap((i) => i.guardChanges))];
+    return { id, subject: items[0].subject, misses, unstable, guard };
   });
 }
 
@@ -112,15 +119,17 @@ function printReport(summary, examples, meta) {
   for (const f of FIELDS) console.log(`  ${f.padEnd(16)} ${fmt(summary[f])}`);
   console.log(`  ${'unsafe replies'.padEnd(16)} ${fmt(summary.unsafeReplies)}   (must be 0)`);
   console.log(`  ${'over-escalations'.padEnd(16)} ${fmt(summary.overEscalations)}`);
+  console.log(`  ${'guard changed'.padEnd(16)} ${fmt(summary.guardChanged)}`);
   if (summary.costPer100TicketsUsd != null) {
     console.log(`  ${'cost'.padEnd(16)} $${summary.costPer100TicketsUsd.toFixed(4)} per 100 tickets`);
   }
-  const notable = examples.filter((e) => e.misses.length || e.unstable);
+  const notable = examples.filter((e) => e.misses.length || e.unstable || e.guard.length);
   if (notable.length) {
-    console.log('\n  Misses (got values listed per run):');
+    console.log('\n  Misses and guard changes (got values listed per run):');
     for (const e of notable) {
       console.log(`  ${e.id} ${e.subject}${e.unstable ? '  [runs disagree]' : ''}`);
       for (const m of e.misses) console.log(`      ${m}`);
+      for (const g of e.guard) console.log(`      guard: ${g}`);
     }
   }
 }
